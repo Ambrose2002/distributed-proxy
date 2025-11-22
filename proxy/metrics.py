@@ -25,6 +25,7 @@ class ProxyMetrics:
         return {
             "start_time": self.start_time,
             "total_requests": self.total_requests,
+            "hit_rate": self.cache_hits / self.cache_misses,
             "hits": self.cache_hits,
             "misses": self.cache_misses,
             "origin_fetches": self.origin_fetches
