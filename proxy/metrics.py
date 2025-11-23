@@ -18,7 +18,7 @@ class ProxyMetrics:
     def record_miss(self):
         self.cache_misses += 1
         
-    def record_origin_fetches(self):
+    def record_origin_fetch(self):
         self.origin_fetches += 1
         
     def report(self):

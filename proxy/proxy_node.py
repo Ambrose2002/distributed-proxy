@@ -35,33 +35,43 @@ class ProxyNode:
             
             if not data:
                 return
-            data = data.decode('utf-8').strip()
-            method, url = data.split(" ")
             
-            if method != "GET":
-                return 
-            
-            resource, key = url.split("/", 1)
+            try:
+                data = data.decode('utf-8').strip()
+                method, url = data.split(" ")
+                
+                if method != "GET":
+                    res = self.build_response("WRONG_METHOD", "", False) 
+                    conn.sendall(res.encode('utf-8'))
+                    return
+                
+                resource, key = url.split("/", 1)
+                
+            except Exception as e:
+                res = self.build_response("BAD_REQUEST", e, False)
+                conn.sendall(res.encode('utf_8'))
+                return
             
             cache_key = self.build_cache_key(resource, key)
-            
-            value, found = self.ttl_cache.get(cache_key)
+                
             self.proxy_metrics.record_request()
+            value, found = self.ttl_cache.get(cache_key)
             
             if found:
                 self.proxy_metrics.record_hit()
-                res = self.build_response("OK", value, True) + "\n"
+                res = self.build_response("OK", value, True)
                 conn.sendall(res.encode('utf-8'))
+                return
                 
             else:
                 self.proxy_metrics.record_miss()
-                self.proxy_metrics.record_origin_fetches()
-                value, status = self.fetch_from_origin(url)
+                self.proxy_metrics.record_origin_fetch()
+                value, status = self.fetch_from_origin(cache_key)
                 
                 if status == "OK":
                     self.ttl_cache.set(cache_key, value)
                     
-                res = self.build_response(status, value, False) + "\n"
+                res = self.build_response(status, value, False)
                 conn.sendall(res.encode('utf-8'))
                             
         
