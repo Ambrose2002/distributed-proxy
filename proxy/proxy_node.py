@@ -2,6 +2,8 @@ import socket
 import cache_utils
 import metrics
 import threading
+import json
+import argparse
 
 class ProxyNode:
     
@@ -41,15 +43,15 @@ class ProxyNode:
                 method, url = data.split(" ")
                 
                 if method != "GET":
-                    res = self.build_response("WRONG_METHOD", "", False) 
+                    res = self.build_response(f"WRONG_METHOD: {method}", "", False) 
                     conn.sendall(res.encode('utf-8'))
                     return
                 
                 resource, key = url.split("/", 1)
                 
             except Exception as e:
-                res = self.build_response("BAD_REQUEST", e, False)
-                conn.sendall(res.encode('utf_8'))
+                res = self.build_response("BAD_REQUEST", str(e), False)
+                conn.sendall(res.encode('utf-8'))
                 return
             
             cache_key = self.build_cache_key(resource, key)
@@ -75,11 +77,106 @@ class ProxyNode:
                 conn.sendall(res.encode('utf-8'))
                             
         
-    def fetch_from_origin(self, key):
-        ...
+    def fetch_from_origin(self, cache_key: str):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        f = None
+        try:
+            try:
+                s.connect((self.origin_host, self.origin_port))
+            except Exception as e:
+                return (None, "ORIGIN_FAILURE")
+            
+            f = s.makefile('r', encoding='utf-8', newline='\n')
+            request = f"GET {cache_key}\n"
+            s.sendall(request.encode('utf-8'))
+            
+            first_line = f.readline()
+            if first_line:
+                j_string = first_line.strip()
+                
+                try:
+                    res = json.loads(j_string)
+                except Exception as e:
+                    return (None, "ORIGIN_FAILURE")
+                
+                if res["status"] == "OK":
+                    return (res["data"], "OK")
+                elif res["status"] == "NOT_FOUND":
+                    return (None, "NOT_FOUND")
+                else:
+                    return (None, "ORIGIN_FAILURE")
+        finally:
+            if f:
+                f.close()
+            s.close()                 
+        return (None, "ORIGIN_FAILURE")    
+            
         
     def build_response(self, status : str, data, cache_hit : bool):
-        ...
         
-    def build_cache_key(resource, key):
+        response = {
+            "status" : status,
+            "data" : data,
+            "cache_hit": cache_hit,
+            "node": self.port
+        }
+        
+        return json.dumps(response) + "\n"
+        
+    def build_cache_key(self, resource, key):
         return resource + "/" + key
+    
+def main(args):
+    
+    if args.port < 1024:
+        print("port must be greater than 1024")
+        return
+    if args.origin_port < 1024:
+        print("origin_port must be greater than 1024")
+        return
+        
+    if args.port == args.origin_port:
+        print("port and origin_port cannot be the same")
+        return
+    
+    print(f"Proxy node starting on {args.host}:{args.port}")
+    proxy_node = ProxyNode(args.host, args.port, args.origin_host, args.origin_port, args.ttl)
+    proxy_node.start_server()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    
+    parser.add_argument(
+        "--host",
+        type = str,
+        default = "127.0.0.1"
+    )
+    
+    parser.add_argument(
+        "--port",
+        type = int,
+        required=True
+    )
+    
+    parser.add_argument(
+        "--origin_host",
+        type = str,
+        default = "127.0.0.1"
+    )
+    
+    parser.add_argument(
+        "--origin_port",
+        type = int,
+        default = 8000
+    )
+    
+    parser.add_argument(
+        "--ttl",
+        type = int,
+        default = 30
+    )
+    
+    args = parser.parse_args()
+    
+    main(args)
+    
