@@ -3,9 +3,9 @@ from datetime import datetime, timedelta
 
 class TTLCache: 
     
-    def __init__(self):
+    def __init__(self, ttl):
         self.store = {}
-        self.ttl = 180
+        self.ttl = ttl
         self.lock = threading.Lock()
         
     def get(self, key):
