@@ -22,10 +22,15 @@ class ProxyMetrics:
         self.origin_fetches += 1
         
     def report(self):
+        total = self.cache_hits + self.cache_misses
+        if total == 0:
+            hit_rate = 0
+        else:
+            hit_rate = self.cache_hits / total
         return {
             "start_time": self.start_time,
             "total_requests": self.total_requests,
-            "hit_rate": self.cache_hits / self.cache_misses,
+            "hit_rate": hit_rate,
             "hits": self.cache_hits,
             "misses": self.cache_misses,
             "origin_fetches": self.origin_fetches
