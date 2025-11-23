@@ -6,25 +6,26 @@ class TTLCache:
     def __init__(self, ttl):
         self.store = {}
         self.ttl = ttl
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         
     def get(self, key):
-        self.lock.acquire()
-        if key not in self.store:
-            return (None, False)
+        with self.lock:
+            if key not in self.store:
+                return (None, False)
 
-        value, exp = self.store[key]
-        if datetime.now() > exp:
-            return (None, False)
-        return (value, True)
+            value, exp = self.store[key]
+            if datetime.now() > exp:
+                self.delete(key)
+                return (None, False)
+            return (value, True)
     
     def set(self, key, value):
-        self.lock.acquire()
-        self.store[key] = (value, datetime.now() + timedelta(seconds = 180))
+        with self.lock:
+            self.store[key] = (value, datetime.now() + timedelta(seconds = self.ttl))
         
     def delete(self, key):
-        self.lock.acquire()
-        self.store.pop(key)
+        with self.lock:
+            self.store.pop(key, None)
         
     def size(self):
         return len(self.store)
