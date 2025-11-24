@@ -278,7 +278,29 @@ def main(args):
         - Start metrics thread.
         - Call start_server().
     """
-    pass
+    try:
+        proxies = args.proxies
+        
+        if not proxies:
+            print(f"No proxies given")
+            return
+        
+        proxy_list = []
+        
+        for proxy in proxies:
+            host, port = proxy.split(":")
+            proxy_list.append((host, int(port)))
+    except Exception as e:
+        print(f"Error parsing args: {str(e)}")
+        return
+    
+    if args.strategy not in ["round_robin", "least_loaded"]:
+        print(f"{args.strategy} is not a supported strategy")
+        return
+    
+    print(f"Load Balancer starting on {args.host}:{args.port}")
+    load_balancer = LoadBalancer(args.host, args.port, proxy_list, args.strategy)
+    load_balancer.start_server()
 
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ class NodeManager:
                 self.nodes[(host, port)]["healthy"] = False
                 
     
-    def get_health_nodes(self):
+    def get_healthy_nodes(self):
         with self.lock:
             healthy_nodes = list(filter(lambda x : self.nodes[x]["healthy"], self.proxy_list))
             

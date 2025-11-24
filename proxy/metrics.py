@@ -35,3 +35,6 @@ class ProxyMetrics:
             "misses": self.cache_misses,
             "origin_fetches": self.origin_fetches
         }
+        
+    def get_total_requests(self):
+        return self.total_requests
