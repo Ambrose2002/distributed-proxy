@@ -1,3 +1,9 @@
+"""ProxyNode is a TCP server that acts as a proxy cache node in a distributed caching system.
+It listens for client requests, serves cached data when available, fetches data from an origin server on cache misses,
+and reports metrics on request handling. The proxy node expects requests in the format "GET resource/key" or the special
+command "METRICS" to retrieve performance statistics. Responses are JSON-encoded with status, data, cache hit info, and node port.
+"""
+
 import socket 
 import cache_utils
 import metrics
@@ -6,8 +12,30 @@ import json
 import argparse
 
 class ProxyNode:
+    """
+    ProxyNode manages incoming TCP connections to serve cached data or fetch from an origin server.
+    It integrates a TTL-based cache, records metrics on hits, misses, and origin fetches, and supports concurrent client handling
+    via threading. It implements a simple text-based protocol where clients send GET requests or METRICS commands,
+    and receive JSON-formatted responses indicating status and data.
+    """
     
     def __init__(self, host, port, origin_host, origin_port, ttl):
+        """
+        Initialize the ProxyNode with network parameters and caching TTL.
+
+        Parameters:
+            host (str): Host address to bind the proxy server.
+            port (int): Port number to bind the proxy server.
+            origin_host (str): Host address of the origin server.
+            origin_port (int): Port number of the origin server.
+            ttl (int): Time-to-live in seconds for cached entries.
+
+        Side Effects:
+            Creates an internal TTLCache instance and ProxyMetrics instance.
+
+        Raises:
+            None.
+        """
         self.host = host
         self.port = port
         self.origin_host = origin_host
@@ -18,6 +46,19 @@ class ProxyNode:
         self.proxy_metrics = metrics.ProxyMetrics()
         
     def start_server(self):
+        """
+        Start the TCP server to listen for incoming client connections.
+
+        Behavior:
+            Binds to the configured host and port, listens for connections,
+            and spawns a new thread to handle each connection concurrently.
+
+        Side Effects:
+            Opens a socket and runs an infinite loop accepting connections.
+
+        Raises:
+            Any socket errors during bind or listen will propagate.
+        """
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((self.host, self.port))
             s.listen(5)
@@ -31,6 +72,28 @@ class ProxyNode:
                 
         
     def handle_connection(self, conn, addr):
+        """
+        Handle a single client connection.
+
+        Parameters:
+            conn (socket.socket): The client connection socket.
+            addr (tuple): The client address.
+
+        Behavior:
+            Reads a request from the client, processes GET or METRICS commands,
+            serves cached data or fetches from origin, and sends JSON-formatted responses.
+
+        Side Effects:
+            Updates metrics for requests, hits, misses, and origin fetches.
+            May update the internal cache on origin fetch success.
+
+        Error Handling:
+            Returns error responses on malformed requests or unsupported methods.
+            Closes the connection after handling.
+
+        Returns:
+            None.
+        """
         
         with conn:
             data = conn.recv(1024)
@@ -89,6 +152,28 @@ class ProxyNode:
                             
         
     def fetch_from_origin(self, cache_key: str):
+        """
+        Fetch the data corresponding to cache_key from the origin server.
+
+        Parameters:
+            cache_key (str): The resource/key string to request from the origin.
+
+        Behavior:
+            Opens a TCP connection to the origin server, sends a GET request,
+            reads a JSON response, and parses status and data.
+
+        Returns:
+            tuple: (data, status)
+                data: The retrieved data if status is "OK", else None.
+                status: One of "OK", "NOT_FOUND", or "ORIGIN_FAILURE".
+
+        Side Effects:
+            Opens and closes a socket connection to the origin server.
+
+        Error Handling:
+            Returns ("None", "ORIGIN_FAILURE") on connection errors,
+            malformed responses, or unexpected status.
+        """
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         f = None
         try:
@@ -124,6 +209,21 @@ class ProxyNode:
             
         
     def build_response(self, status : str, data, cache_hit : bool):
+        """
+        Build a JSON-formatted response string for client.
+
+        Parameters:
+            status (str): Status string indicating request outcome.
+            data: The payload data to include in the response.
+            cache_hit (bool): Whether the response data was served from cache.
+
+        Returns:
+            str: JSON string with fields "status", "data", "cache_hit", and "node",
+                 terminated by a newline character.
+
+        Side Effects:
+            None.
+        """
         
         response = {
             "status" : status,
@@ -135,9 +235,44 @@ class ProxyNode:
         return json.dumps(response) + "\n"
         
     def build_cache_key(self, resource, key):
+        """
+        Construct a cache key string from resource and key.
+
+        Parameters:
+            resource (str): The resource name.
+            key (str): The key within the resource.
+
+        Returns:
+            str: Concatenated cache key in the form "resource/key".
+
+        Side Effects:
+            None.
+        """
         return resource + "/" + key
     
 def main(args):
+    """
+    Main entry point for running the ProxyNode from the command line.
+
+    Parameters:
+        args (argparse.Namespace): Parsed command line arguments with attributes:
+            - host (str): Host to bind the proxy.
+            - port (int): Port to bind the proxy. Must be > 1024.
+            - origin_host (str): Origin server host.
+            - origin_port (int): Origin server port. Must be > 1024.
+            - ttl (int): Cache time-to-live in seconds.
+
+    Behavior:
+        Validates port arguments, prints error messages if invalid,
+        initializes and starts the ProxyNode server.
+
+    Side Effects:
+        Prints status messages to stdout.
+        Runs a blocking server loop.
+
+    Returns:
+        None.
+    """
     
     if args.port < 1024:
         print("port must be greater than 1024")
@@ -155,6 +290,22 @@ def main(args):
     proxy_node.start_server()
 
 if __name__ == "__main__":
+    """
+    Command-line interface to run the ProxyNode.
+
+    Usage:
+        python proxy_node.py --port <port> [--host <host>] [--origin_host <origin_host>]
+                             [--origin_port <origin_port>] [--ttl <ttl>]
+
+    Required Arguments:
+        --port: Port number for the proxy server (must be > 1024).
+
+    Optional Arguments:
+        --host: Host address for the proxy server (default 127.0.0.1).
+        --origin_host: Host address of the origin server (default 127.0.0.1).
+        --origin_port: Port of the origin server (default 8000, must be > 1024).
+        --ttl: Cache time-to-live in seconds (default 30).
+    """
     parser = argparse.ArgumentParser()
     
     parser.add_argument(
@@ -190,4 +341,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     main(args)
-    

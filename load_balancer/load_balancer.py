@@ -1,3 +1,15 @@
+"""Load Balancer for Distributed Proxy System
+
+This module implements a load balancer that distributes incoming client requests 
+across multiple proxy nodes. It supports different load balancing strategies 
+such as round-robin and least-loaded to optimize request handling and resource usage. 
+
+The load balancer monitors the health and metrics of each proxy node, dynamically 
+adjusting routing decisions based on node availability and performance. It acts as 
+a centralized entry point for clients, forwarding requests to appropriate proxy nodes 
+and aggregating metrics for monitoring purposes.
+"""
+
 import socket
 import threading
 import argparse
@@ -7,22 +19,38 @@ from node_manager import NodeManager
 
 
 class LoadBalancer:
+    """
+    Represents a load balancer that manages a pool of proxy nodes and distributes client requests among them.
+
+    Responsibilities:
+    - Accept incoming client connections and requests.
+    - Select an appropriate proxy node based on the configured load balancing strategy.
+    - Forward client requests to the selected proxy node and relay responses back to the client.
+    - Monitor the health and performance metrics of each proxy node.
+    - Manage proxy node statuses (healthy/unhealthy) and update routing decisions accordingly.
+
+    Interactions:
+    - Uses NodeManager to track and update the health status of proxy nodes.
+    - Communicates with proxy nodes over TCP sockets to forward requests and retrieve metrics.
+    """
 
     def __init__(self, host, port, proxy_list, strategy):
         """
-        Initialize the load balancer.
+        Initialize the LoadBalancer instance.
 
         Parameters:
-            host (str): Host for LB to listen on.
-            port (int): Port for LB to listen on.
-            proxy_list (list[(str,int)]): List of proxy nodes.
-            strategy (str): 'round_robin' or 'least_loaded'.
+        - host (str): The IP address or hostname where the load balancer listens.
+        - port (int): The port number where the load balancer listens.
+        - proxy_list (list of tuples): List of proxy nodes as (host, port) tuples.
+        - strategy (str): Load balancing strategy to use ("round_robin" or "least_loaded").
 
-        Internal State:
-            - node_manager: Manages proxy health + failures.
-            - proxy_stats: Stores metrics for each proxy.
-            - current_index: Index for round-robin.
-            - strategy: Load balancing policy.
+        Behavior:
+        - Sets up internal structures for proxy management and metrics tracking.
+        - Initializes a NodeManager instance for health monitoring of proxies.
+        - Starts a background thread to periodically fetch metrics from proxies.
+
+        Side Effects:
+        - Starts a daemon thread for metrics collection.
         """
         self.host = host
         self.port = port
@@ -42,13 +70,18 @@ class LoadBalancer:
 
     def start_server(self):
         """
-        Starts the LB server.
+        Start the load balancer server to accept incoming client connections.
 
         Behavior:
-            - Create a TCP socket bound to (host,port).
-            - Listen for connections.
-            - For each connection:
-                - Spawn thread for handle_client(conn, addr).
+        - Creates a TCP socket bound to the configured host and port.
+        - Listens for incoming client connections.
+        - For each accepted connection, spawns a new thread to handle the client request.
+
+        Side Effects:
+        - Runs indefinitely, accepting and handling client connections concurrently.
+
+        Error Handling:
+        - Exceptions during socket operations are not explicitly caught here and will propagate.
         """
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((self.host, self.port))
@@ -64,16 +97,27 @@ class LoadBalancer:
 
     def handle_client(self, conn, addr):
         """
-        Handles a single client connection.
+        Handle an individual client connection.
+
+        Parameters:
+        - conn (socket.socket): The socket connection to the client.
+        - addr (tuple): The client address.
 
         Behavior:
-            - Read exactly one request line.
-            - Choose a proxy using pick_proxy().
-            - Forward the request to that proxy via forward_request().
-            - Return the proxy response to the client.
-            - On failure: return JSON error: PROXY_UNREACHABLE.
+        - Receives data from the client.
+        - If the client requests "METRICS", returns the current load balancer and proxy metrics.
+        - Otherwise, selects a proxy node based on the strategy and forwards the client's request.
+        - Sends the response from the proxy back to the client.
+        - Handles proxy unreachability by sending appropriate error responses.
+
+        Side Effects:
+        - May mark proxy nodes as healthy or unhealthy based on communication success.
+        - Sends data back to the client over the socket.
+
+        Error Handling:
+        - If no data is received, returns immediately.
+        - If forwarding fails, sends error JSON responses to client.
         """
-        
         with conn:
             data = conn.recv(1024)
             
@@ -129,18 +173,22 @@ class LoadBalancer:
 
     def pick_proxy(self):
         """
-        Determines which proxy should handle the next request.
+        Select a proxy node based on the configured load balancing strategy.
+
+        Returns:
+        - tuple: (host, port) of the selected proxy node.
+        - None: if no proxies are available.
 
         Behavior:
-            - If strategy == 'round_robin':
-                choose next healthy proxy in circular order.
-            - If strategy == 'least_loaded':
-                choose healthy proxy with lowest total_requests
-                (from proxy_stats).
-            - If no healthy proxies:
-                fallback to all proxies.
+        - Filters to healthy proxies if any exist; otherwise uses all proxies.
+        - If strategy is "round_robin", selects proxies in cyclic order.
+        - If strategy is "least_loaded", selects the proxy with the fewest total requests.
 
-        Returns: (host, port)
+        Side Effects:
+        - Updates the current index counter for round robin strategy.
+
+        Error Handling:
+        - Assumes proxy_stats entries may be None and treats them as zero load.
         """
         healthy_proxies = self.node_manager.get_healthy_nodes()
         if not healthy_proxies:
@@ -158,21 +206,31 @@ class LoadBalancer:
 
     def forward_request(self, proxy_host, proxy_port, raw_request):
         """
-        Forwards the client request to the chosen proxy node.
+        Forward a client request to a specified proxy node and retrieve the response.
 
         Parameters:
-            proxy_host (str)
-            proxy_port (int)
-            raw_request (str): The actual request line ('GET article/1\n').
+        - proxy_host (str): Hostname or IP of the proxy node.
+        - proxy_port (int): Port number of the proxy node.
+        - raw_request (str): The raw request string to forward.
+
+        Returns:
+        - str: JSON-formatted response string from the proxy node, including newline.
+        - None: If the proxy is unreachable or response invalid.
 
         Behavior:
-            - Connect to proxy.
-            - Send raw_request.
-            - Read one newline-terminated JSON response.
-            - Return the response string.
-            - On failure:
-                - mark proxy unhealthy in NodeManager
-                - return PROXY_UNREACHABLE JSON
+        - Establishes a TCP connection to the proxy node.
+        - Sends the raw request.
+        - Reads a single line response and attempts to parse it as JSON.
+        - Marks the proxy node as healthy if response is valid.
+        - Marks the proxy node as unhealthy if connection or response fails.
+
+        Side Effects:
+        - Updates node health status via NodeManager.
+        - Opens and closes socket connections.
+
+        Error Handling:
+        - Catches connection errors and JSON parsing errors.
+        - Returns error JSON strings on failure.
         """
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         f = None
@@ -217,18 +275,22 @@ class LoadBalancer:
 
     def metrics_loop(self):
         """
-        Background thread that polls metrics from each proxy node.
+        Background loop that periodically requests and updates metrics from all proxy nodes.
 
         Behavior:
-            - Runs forever.
-            - Sleep for 2 seconds.
-            - For each proxy:
-                - Send 'METRICS\\n'.
-                - Read reply.
-                - If success: update proxy_stats and mark healthy.
-                - If failure: mark unhealthy.
+        - Runs indefinitely, waking every 2 seconds.
+        - Requests metrics from each proxy node by connecting and sending a "METRICS" request.
+        - Updates internal proxy_stats dictionary with the latest metrics.
+        - Marks proxies as healthy or unhealthy based on metrics retrieval success.
+        - Logs exceptions and continues running.
+
+        Side Effects:
+        - Updates proxy health status and metrics.
+        - Runs as a daemon thread.
+
+        Error Handling:
+        - Catches and logs all exceptions to prevent thread termination.
         """
-        
         while True:
             try:
                 time.sleep(2)
@@ -247,14 +309,27 @@ class LoadBalancer:
 
     def request_metrics(self, host, port):
         """
-        Connect to a proxy and issue a METRICS request.
+        Request metrics data from a single proxy node.
+
+        Parameters:
+        - host (str): Hostname or IP of the proxy node.
+        - port (int): Port number of the proxy node.
+
+        Returns:
+        - dict: Parsed metrics data if successful.
+        - None: If unable to connect or parse metrics.
 
         Behavior:
-            - Connect to proxy.
-            - Send 'METRICS\\n'.
-            - Read response line.
-            - If status=='OK', return the metrics dict.
-            - Else return None.
+        - Connects to the proxy node over TCP.
+        - Sends a "METRICS\n" request.
+        - Reads a single line response and attempts to parse it as JSON.
+        - Validates the response status and extracts data.
+
+        Side Effects:
+        - Opens and closes socket connections.
+
+        Error Handling:
+        - Returns None on connection failures or invalid JSON responses.
         """
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         f = None
@@ -291,13 +366,25 @@ class LoadBalancer:
 
 def main(args):
     """
-    Entry point for starting the Load Balancer.
+    Main entry point for the load balancer CLI.
 
-    Steps:
-        - Parse proxies from args.
-        - Instantiate LoadBalancer.
-        - Start metrics thread.
-        - Call start_server().
+    Parameters:
+    - args (argparse.Namespace): Parsed command-line arguments.
+
+    Expected CLI Arguments:
+    - --host (str): Host/IP to bind the load balancer (default: 127.0.0.1).
+    - --port (int): Port number to bind the load balancer (required).
+    - --proxies (list of str): List of proxy nodes in "host:port" format.
+    - --strategy (str): Load balancing strategy, either "round_robin" or "least_loaded" (default: "round_robin").
+
+    Behavior:
+    - Parses and validates proxy node addresses.
+    - Validates the load balancing strategy.
+    - Instantiates and starts the LoadBalancer server.
+
+    Side Effects:
+    - Prints error messages for invalid arguments or configurations.
+    - Runs the load balancer server indefinitely upon successful start.
     """
     try:
         proxies = args.proxies
@@ -325,6 +412,14 @@ def main(args):
 
 
 if __name__ == "__main__":
+    """
+    Command-line interface for starting the load balancer.
+
+    Usage example:
+    python load_balancer.py --host 127.0.0.1 --port 8000 --proxies 127.0.0.1:9000 127.0.0.1:9001 --strategy round_robin
+
+    This block parses CLI arguments and invokes the main function to start the server.
+    """
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--host", type=str, default="127.0.0.1")
