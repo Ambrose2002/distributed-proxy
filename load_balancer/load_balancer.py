@@ -80,6 +80,27 @@ class LoadBalancer:
             if not data: return
             
             decoded_data = data.decode('utf-8')
+            
+            if decoded_data.strip() == "METRICS":
+                
+                res = {}
+                res["status"] = "OK"
+                data = {}
+                data["strategy"] = self.strategy
+                data["current_index"] = self.current_index
+                data["proxies"] = {}
+                
+                for proxy_host, proxy_port in self.proxy_list:
+                    proxy_str = f"{proxy_host}:{proxy_port}"
+                    proxy_stat = {}
+                    proxy_stat["healthy"] = self.node_manager.is_healthy(proxy_host, proxy_port)
+                    proxy_stat["metrics"] = self.proxy_stats[(proxy_host, proxy_port)]
+                    data["proxies"][proxy_str] = proxy_stat 
+                res["data"] = data
+                
+                conn.sendall((json.dumps(res) + "\n").encode('utf-8'))
+                return 
+            
             decoded_data = decoded_data.strip() + "\n"
             
             proxy = self.pick_proxy()
