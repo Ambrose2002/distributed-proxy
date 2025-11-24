@@ -28,7 +28,7 @@ class ProxyMetrics:
         else:
             hit_rate = self.cache_hits / total
         return {
-            "start_time": self.start_time,
+            "start_time": self.start_time.isoformat(),
             "total_requests": self.total_requests,
             "hit_rate": hit_rate,
             "hits": self.cache_hits,
