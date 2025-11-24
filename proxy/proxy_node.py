@@ -40,6 +40,17 @@ class ProxyNode:
             
             try:
                 data = data.decode('utf-8').strip()
+                
+                if data == "METRICS":
+                    metrics_dict = self.proxy_metrics.report()
+                    res = {}
+                    res["status"] = "OK"
+                    res["data"] = metrics_dict
+                    
+                    res_string = json.dumps(res) + "\n"
+                    conn.sendall(res_string.encode('utf-8'))
+                    return
+                
                 method, url = data.split(" ")
                 
                 if method != "GET":
