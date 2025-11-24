@@ -46,6 +46,14 @@ def send_request(host, port, request_str):
             
 def run(args):
     
+    if args.metrics:
+        request_str = "METRICS\n"
+        print(send_request(args.host, args.port, request_str))
+        return
+    
+    if not args.get:
+        print("Error: GET endpoint must be provided")
+        return
     url = args.get
     request_str = build_request(url)
     print(send_request(args.host, args.port, request_str))
@@ -62,6 +70,11 @@ if __name__ == "__main__":
     )   
     
     parser.add_argument(
+        "--metrics", 
+        action="store_true"
+    )
+    
+    parser.add_argument(
         "--port",
         type = int,
         required = True
@@ -70,7 +83,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--get",
         type = str,
-        required = True
     )
     
     args = parser.parse_args()
