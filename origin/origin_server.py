@@ -74,7 +74,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 
             # Parse resource and key from URL path
             resource, key = url.split("/", 1)
-            filepath = "data/" + resource + key + ".json"
+            filepath = "../origin/data/" + resource + key + ".json"
             print(f"{method} to file at {filepath}")
             
             # Attempt to load requested JSON file and send response
