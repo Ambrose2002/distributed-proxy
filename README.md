@@ -54,6 +54,29 @@ python client/client.py --port 9000 --metrics
 
 ---
 
+## Using the Cluster Scripts
+
+To easily start and stop the full distributed system, use the provided scripts in the `scripts/` directory.
+
+### Start the full cluster
+```
+./scripts/start_cluster.sh
+```
+
+This launches:
+- Origin server  
+- All proxy nodes  
+- Load balancer  
+
+### Stop the full cluster
+```
+./scripts/kill_cluster.sh
+```
+
+This safely terminates all running components using both tracked PIDs and process-name matching.
+
+---
+
 ## Project Structure
 
 ```
@@ -67,4 +90,4 @@ client/         - client CLI
 
 ## Summary
 
-This project demonstrates a clean and minimal implementation of distributed caching with clear separation between origin, proxies, load balancer, and client. It is designed for learning and experimentation with distributed systems behavior.
+This project demonstrates a clean and minimal implementation of distributed caching with clear separation between origin, proxies, load balancer, and client.

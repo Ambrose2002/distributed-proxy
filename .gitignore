@@ -1,0 +1,2 @@
+# Ignore cluster PID tracking file
+scripts/.cluster_pids
