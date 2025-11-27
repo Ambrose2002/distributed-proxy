@@ -11,7 +11,7 @@ A simple distributed caching system built to practice core distributed systems c
 
 ## Features
 
-- TTL-based caching at each proxy.
+- TTL/LRU-based caching at each proxy.
 - Round-robin or least-loaded load balancing.
 - Health checks and automatic failure detection.
 - Metrics reporting from proxies and the load balancer.
@@ -22,7 +22,7 @@ A simple distributed caching system built to practice core distributed systems c
 
 ## Cache Types
 
-- `--cache_type ttl` (default TTL-based cache)
+- `--cache_type ttl` (TTL cache with configurable ttl)
 - `--cache_type lru` (LRU cache with configurable capacity)
 
 ---
@@ -37,7 +37,7 @@ python origin/origin_server.py
 ### 2. Start Proxy Nodes
 ```
 python proxy/proxy_node.py --port 8001 --origin_port 8000 --cache_type lru
-python proxy/proxy_node.py --port 8002 --origin_port 8000 --cache_type lru
+python proxy/proxy_node.py --port 8002 --origin_port 8000 --cache_type ttl
 python proxy/proxy_node.py --port 8003 --origin_port 8000 --cache_type lru
 ```
 
