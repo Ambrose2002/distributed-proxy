@@ -7,6 +7,7 @@ redundant data retrievals within the proxy node.
 
 import threading
 from datetime import datetime, timedelta
+from collections import defaultdict
 
 class TTLCache: 
     """Thread-safe cache storing key-value pairs with expiration timestamps.
@@ -96,3 +97,76 @@ class TTLCache:
             Not explicitly locked; may reflect approximate size if concurrent modifications occur.
         """
         return len(self.store)
+    
+
+class ListNode:
+    def __init__(self, key, value, next=None, prev=None):
+        self.key = key
+        self.value = value
+        self.next = next
+        self.prev = prev
+        
+        
+class LRUCache:
+    
+    def __init__(self, capacity):
+        self.capacity = capacity
+        
+        self.head = ListNode("head", "")
+        self.tail = ListNode("tail", "")
+        self.head.next = self.tail
+        self.tail.prev = self.head
+        
+        self.dict = {}
+        
+    
+    def get(self, key):
+        
+        if key not in self.dict:
+            return None
+        
+        node = self.dict[key]
+        
+        self._delete(node)
+        self._add_to_end(node)
+        self.dict[key] = node
+        return node.value
+        
+    def set(self, key, value):
+        if key in self.dict:
+            node = self.dict[key]
+            node.value = value
+            self._delete(node)
+        else:
+            node = ListNode(key, value)
+        
+        self._add_to_end(node)
+        self.dict[key] = node
+        
+        if self.size() > self.capacity:
+            node_to_delete = self.head.next
+            self._delete(node_to_delete)
+        
+    def _delete(self, node):
+        node.prev.next = node.next
+        node.next.prev = node.prev
+        
+        self.dict.pop(node.key)
+        
+        node.prev = None
+        node.next = None
+        
+        
+        
+    def _add_to_end(self, node):
+        previous = self.tail.prev
+        if previous is None:
+            raise RuntimeError("List structure corrupted: tail.prev is None")
+        previous.next = node
+        node.prev = previous
+        node.next = self.tail
+        self.tail.prev = node
+        
+        
+    def size(self):
+        return len(self.dict)
