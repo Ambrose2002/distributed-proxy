@@ -118,34 +118,37 @@ class LRUCache:
         self.tail.prev = self.head
         
         self.dict = {}
+        self.lock = threading.RLock()
         
     
     def get(self, key):
         
-        if key not in self.dict:
-            return None
-        
-        node = self.dict[key]
-        
-        self._delete(node)
-        self._add_to_end(node)
-        self.dict[key] = node
-        return node.value
+        with self.lock:
+            if key not in self.dict:
+                return None
+            
+            node = self.dict[key]
+            
+            self._delete(node)
+            self._add_to_end(node)
+            self.dict[key] = node
+            return node.value
         
     def set(self, key, value):
-        if key in self.dict:
-            node = self.dict[key]
-            node.value = value
-            self._delete(node)
-        else:
-            node = ListNode(key, value)
-        
-        self._add_to_end(node)
-        self.dict[key] = node
-        
-        if self.size() > self.capacity:
-            node_to_delete = self.head.next
-            self._delete(node_to_delete)
+        with self.lock:
+            if key in self.dict:
+                node = self.dict[key]
+                node.value = value
+                self._delete(node)
+            else:
+                node = ListNode(key, value)
+            
+            self._add_to_end(node)
+            self.dict[key] = node
+            
+            if self.size() > self.capacity:
+                node_to_delete = self.head.next
+                self._delete(node_to_delete)
         
     def _delete(self, node):
         node.prev.next = node.next
