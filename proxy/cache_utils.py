@@ -8,8 +8,29 @@ redundant data retrievals within the proxy node.
 import threading
 from datetime import datetime, timedelta
 from collections import defaultdict
+from abc import ABC, abstractmethod
+from typing import Any, Tuple 
 
-class TTLCache: 
+class Cache(ABC):
+    
+    def __init__(self):
+        self.store = {}
+        self.lock = threading.RLock()
+        
+        
+    @abstractmethod
+    def get(self, key) -> Tuple[Any, bool]:
+        pass
+    
+    @abstractmethod
+    def set(self, key, value):
+        pass
+    
+    def size(self):
+        return len(self.store)
+    
+
+class TTLCache(Cache): 
     """Thread-safe cache storing key-value pairs with expiration timestamps.
 
     This cache maintains entries with a fixed time-to-live (TTL). Entries are evicted
@@ -27,9 +48,8 @@ class TTLCache:
         Side Effects:
             Creates an internal store dictionary and a reentrant lock for concurrency control.
         """
-        self.store = {}
+        super().__init__()
         self.ttl = ttl
-        self.lock = threading.RLock()
         
     def get(self, key):
         """Retrieve the value for a given key if it exists and has not expired.
@@ -107,44 +127,43 @@ class ListNode:
         self.prev = prev
         
         
-class LRUCache:
+class LRUCache(Cache):
     
     def __init__(self, capacity):
+        super().__init__()
         self.capacity = capacity
         
         self.head = ListNode("head", "")
         self.tail = ListNode("tail", "")
         self.head.next = self.tail
         self.tail.prev = self.head
-        
-        self.dict = {}
         self.lock = threading.RLock()
         
     
     def get(self, key):
         
         with self.lock:
-            if key not in self.dict:
-                return None
+            if key not in self.store:
+                return (None, False)
             
-            node = self.dict[key]
+            node = self.store[key]
             
             self._delete(node)
             self._add_to_end(node)
-            self.dict[key] = node
-            return node.value
+            self.store[key] = node
+            return (node.value, True)
         
     def set(self, key, value):
         with self.lock:
-            if key in self.dict:
-                node = self.dict[key]
+            if key in self.store:
+                node = self.store[key]
                 node.value = value
                 self._delete(node)
             else:
                 node = ListNode(key, value)
             
             self._add_to_end(node)
-            self.dict[key] = node
+            self.store[key] = node
             
             if self.size() > self.capacity:
                 node_to_delete = self.head.next
@@ -154,7 +173,7 @@ class LRUCache:
         node.prev.next = node.next
         node.next.prev = node.prev
         
-        self.dict.pop(node.key)
+        self.store.pop(node.key)
         
         node.prev = None
         node.next = None
@@ -172,4 +191,4 @@ class LRUCache:
         
         
     def size(self):
-        return len(self.dict)
+        return len(self.store)
