@@ -19,7 +19,7 @@ class ProxyNode:
     and receive JSON-formatted responses indicating status and data.
     """
     
-    def __init__(self, host, port, origin_host, origin_port, ttl):
+    def __init__(self, host, port, origin_host, origin_port, cache_type, ttl, lru_capacity):
         """
         Initialize the ProxyNode with network parameters and caching TTL.
 
@@ -40,9 +40,11 @@ class ProxyNode:
         self.port = port
         self.origin_host = origin_host
         self.origin_port = origin_port
-        self.ttl = ttl
         
-        self.ttl_cache = cache_utils.TTLCache(ttl)
+        if cache_type == "ttl":
+            self.cache = cache_utils.TTLCache(ttl)
+        else:
+            self.cache = cache_utils.LRUCache(lru_capacity)
         self.proxy_metrics = metrics.ProxyMetrics()
         
     def start_server(self):
@@ -131,7 +133,7 @@ class ProxyNode:
             cache_key = self.build_cache_key(resource, key)
                 
             self.proxy_metrics.record_request()
-            value, found = self.ttl_cache.get(cache_key)
+            value, found = self.cache.get(cache_key)
             
             if found:
                 self.proxy_metrics.record_hit()
@@ -145,7 +147,7 @@ class ProxyNode:
                 value, status = self.fetch_from_origin(cache_key)
                 
                 if status == "OK":
-                    self.ttl_cache.set(cache_key, value)
+                    self.cache.set(cache_key, value)
                     
                 res = self.build_response(status, value, False)
                 conn.sendall(res.encode('utf-8'))
@@ -286,7 +288,7 @@ def main(args):
         return
     
     print(f"Proxy node starting on {args.host}:{args.port}")
-    proxy_node = ProxyNode(args.host, args.port, args.origin_host, args.origin_port, args.ttl)
+    proxy_node = ProxyNode(args.host, args.port, args.origin_host, args.origin_port, args.cache_type, args.ttl, args.lru_capacity)
     proxy_node.start_server()
 
 if __name__ == "__main__":
@@ -336,6 +338,17 @@ if __name__ == "__main__":
         "--ttl",
         type = int,
         default = 30
+    )
+    
+    parser.add_argument(
+        "--cache_type",
+        type = str,
+    )
+    
+    parser.add_argument(
+        "--lru_capacity",
+        type = int,
+        default = 3
     )
     
     args = parser.parse_args()
