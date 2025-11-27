@@ -37,14 +37,14 @@ def test_get_basic():
     cache = LRUCache(3)
     cache.set("key1", "value1")
     
-    assert cache.get("key1") == "value1"
+    assert cache.get("key1")[0] == "value1"
     
 def test_get_modified_key():
     cache = LRUCache(3)
     cache.set("key1", "value1")
     cache.set("key1", "value01")
     
-    assert cache.get("key1") == "value01"
+    assert cache.get("key1")[0] == "value01"
     
 def test_get_capacity_exceeded():
     cache = LRUCache(2)
@@ -52,4 +52,4 @@ def test_get_capacity_exceeded():
     cache.set("key2", "value2")
     cache.set("key3", "value3")
     
-    assert cache.get("key1") == None
+    assert cache.get("key1")[0] == None
