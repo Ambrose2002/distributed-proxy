@@ -16,6 +16,14 @@ A simple distributed caching system built to practice core distributed systems c
 - Health checks and automatic failure detection.
 - Metrics reporting from proxies and the load balancer.
 - Simple newline‑terminated JSON request/response protocol.
+- Support for multiple cache types (TTLCache and LRUCache) configurable per proxy.
+
+---
+
+## Cache Types
+
+- `--cache_type ttl` (default TTL-based cache)
+- `--cache_type lru` (LRU cache with configurable capacity)
 
 ---
 
@@ -28,9 +36,9 @@ python origin/origin_server.py
 
 ### 2. Start Proxy Nodes
 ```
-python proxy/proxy_node.py --port 8001 --origin_port 8000
-python proxy/proxy_node.py --port 8002 --origin_port 8000
-python proxy/proxy_node.py --port 8003 --origin_port 8000
+python proxy/proxy_node.py --port 8001 --origin_port 8000 --cache_type lru
+python proxy/proxy_node.py --port 8002 --origin_port 8000 --cache_type lru
+python proxy/proxy_node.py --port 8003 --origin_port 8000 --cache_type lru
 ```
 
 ### 3. Start the Load Balancer
@@ -65,8 +73,10 @@ To easily start and stop the full distributed system, use the provided scripts i
 
 This launches:
 - Origin server  
-- All proxy nodes  
+- All proxy nodes (started with LRUCache by default)  
 - Load balancer  
+
+Proxies are started with the provided cache type via start_cluster.sh.
 
 ### Stop the full cluster
 ```

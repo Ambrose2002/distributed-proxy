@@ -32,10 +32,13 @@ GET resource/key
 ## 2. Proxy Node
 
 **Purpose:**  
-Acts as a caching layer that reduces load on the origin server.
+Acts as a caching layer that reduces load on the origin server.  
+The cache type is selectable via the `--cache_type` argument (`ttl` or `lru`).
 
 **Key Components:**
-- **TTLCache:** Stores key → (value, expiration timestamp).
+- **Cache Layer:** Supports two interchangeable cache types:
+  - TTLCache: key → (value, expiration timestamp)
+  - LRUCache: key → value with least-recently-used eviction
 - **Metrics:** Tracks hits, misses, requests, and origin fetches.
 - **TCP Server:** Handles client requests concurrently using threads.
 
@@ -126,9 +129,9 @@ python origin/origin_server.py
 
 **Start Proxies:**
 ```
-python proxy/proxy_node.py --port 8001 --origin_port 8000
-python proxy/proxy_node.py --port 8002 --origin_port 8000
-python proxy/proxy_node.py --port 8003 --origin_port 8000
+python proxy/proxy_node.py --port 8001 --origin_port 8000 --cache_type ttl
+python proxy/proxy_node.py --port 8002 --origin_port 8000 --cache_type ttl
+python proxy/proxy_node.py --port 8003 --origin_port 8000 --cache_type ttl
 ```
 
 **Start Load Balancer:**
@@ -142,6 +145,13 @@ python client/client.py --port 9000 --get article/1
 python client/client.py --port 9000 --metrics
 ```
 
+### Cache Type Options
+
+```
+--cache_type ttl   # default TTL-based caching
+--cache_type lru   # LRU caching with eviction policy
+```
+
 ---
 
 ## 9. Summary
@@ -151,7 +161,7 @@ This system demonstrates core distributed-system concepts through a clean, minim
 - Origin → Proxies (caching) → Load Balancer → Client  
 - Health checks  
 - Failover and request routing  
-- TTL caching  
+- Pluggable caching strategies (TTL or LRU)  
 - Cluster-wide metrics reporting  
 
 Simple, predictable behaviors make the system easy to extend or modify while maintaining clarity.

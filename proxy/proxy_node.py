@@ -17,6 +17,7 @@ class ProxyNode:
     It integrates a TTL-based cache, records metrics on hits, misses, and origin fetches, and supports concurrent client handling
     via threading. It implements a simple text-based protocol where clients send GET requests or METRICS commands,
     and receive JSON-formatted responses indicating status and data.
+    Supports two cache types: "ttl" and "lru", using TTLCache or LRUCache accordingly.
     """
     
     def __init__(self, host, port, origin_host, origin_port, cache_type, ttl, lru_capacity):
@@ -28,10 +29,12 @@ class ProxyNode:
             port (int): Port number to bind the proxy server.
             origin_host (str): Host address of the origin server.
             origin_port (int): Port number of the origin server.
-            ttl (int): Time-to-live in seconds for cached entries.
+            cache_type (str): "ttl" or "lru", selects which cache implementation to use.
+            ttl (int): TTL in seconds for TTLCache.
+            lru_capacity (int): Maximum number of entries for LRUCache.
 
         Side Effects:
-            Creates an internal TTLCache instance and ProxyMetrics instance.
+            Creates an internal TTLCache or LRUCache instance based on cache_type and a ProxyMetrics instance.
 
         Raises:
             None.
@@ -54,6 +57,7 @@ class ProxyNode:
         Behavior:
             Binds to the configured host and port, listens for connections,
             and spawns a new thread to handle each connection concurrently.
+            Each connection is handled concurrently and this method blocks indefinitely.
 
         Side Effects:
             Opens a socket and runs an infinite loop accepting connections.
@@ -84,6 +88,7 @@ class ProxyNode:
         Behavior:
             Reads a request from the client, processes GET or METRICS commands,
             serves cached data or fetches from origin, and sends JSON-formatted responses.
+            If cache_type is LRU, recency is updated on each get/set.
 
         Side Effects:
             Updates metrics for requests, hits, misses, and origin fetches.
@@ -168,6 +173,7 @@ class ProxyNode:
             tuple: (data, status)
                 data: The retrieved data if status is "OK", else None.
                 status: One of "OK", "NOT_FOUND", or "ORIGIN_FAILURE".
+                The status may be "ORIGIN_FAILURE" when connection or parse fails.
 
         Side Effects:
             Opens and closes a socket connection to the origin server.
@@ -221,7 +227,7 @@ class ProxyNode:
 
         Returns:
             str: JSON string with fields "status", "data", "cache_hit", and "node",
-                 terminated by a newline character.
+                 terminated by a newline character. The node field indicates which proxy node served the request.
 
         Side Effects:
             None.
@@ -263,6 +269,8 @@ def main(args):
             - origin_host (str): Origin server host.
             - origin_port (int): Origin server port. Must be > 1024.
             - ttl (int): Cache time-to-live in seconds.
+            - cache_type (str): Cache implementation type, either "ttl" or "lru".
+            - lru_capacity (int): Maximum number of entries for LRUCache.
 
     Behavior:
         Validates port arguments, prints error messages if invalid,
@@ -274,6 +282,9 @@ def main(args):
 
     Returns:
         None.
+
+    Example usage:
+        python proxy_node.py --port 9000 --host 127.0.0.1 --origin_host 127.0.0.1 --origin_port 8000 --ttl 30 --cache_type ttl --lru_capacity 3
     """
     
     if args.port < 1024:
@@ -297,7 +308,7 @@ if __name__ == "__main__":
 
     Usage:
         python proxy_node.py --port <port> [--host <host>] [--origin_host <origin_host>]
-                             [--origin_port <origin_port>] [--ttl <ttl>]
+                             [--origin_port <origin_port>] [--ttl <ttl>] [--cache_type <ttl|lru>] [--lru_capacity <int>]
 
     Required Arguments:
         --port: Port number for the proxy server (must be > 1024).
@@ -307,6 +318,8 @@ if __name__ == "__main__":
         --origin_host: Host address of the origin server (default 127.0.0.1).
         --origin_port: Port of the origin server (default 8000, must be > 1024).
         --ttl: Cache time-to-live in seconds (default 30).
+        --cache_type: Cache implementation type, either "ttl" or "lru".
+        --lru_capacity: Maximum number of entries for LRUCache (default 3).
     """
     parser = argparse.ArgumentParser()
     

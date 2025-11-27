@@ -1,8 +1,9 @@
-"""Module providing a thread-safe TTLCache for caching data with expiration support in the proxy node.
+"""Module providing thread-safe TTLCache and LRUCache implementations along with an abstract Cache base class for caching data with expiration support in the proxy node.
 
 The TTLCache is used to store key-value pairs with a time-to-live (TTL), ensuring that cached data
-is automatically evicted after the TTL expires. This cache helps improve performance by reducing
-redundant data retrievals within the proxy node.
+is automatically evicted after the TTL expires. The LRUCache implements a Least Recently Used
+eviction policy. Both caches help improve performance by reducing redundant data retrievals
+within the proxy node.
 """
 
 import threading
@@ -12,6 +13,12 @@ from abc import ABC, abstractmethod
 from typing import Any, Tuple 
 
 class Cache(ABC):
+    """Abstract base class for cache implementations.
+
+    Defines a thread-safe interface for cache operations including get, set, and size.
+    Subclasses must implement the get and set methods.
+    Thread safety is managed via a reentrant lock.
+    """
     
     def __init__(self):
         self.store = {}
@@ -106,20 +113,13 @@ class TTLCache(Cache):
         """
         with self.lock:
             self.store.pop(key, None)
-        
-    def size(self):
-        """Return the current number of entries in the cache.
-
-        Returns:
-            int: Number of key-value pairs stored.
-
-        Concurrency:
-            Not explicitly locked; may reflect approximate size if concurrent modifications occur.
-        """
-        return len(self.store)
     
 
 class ListNode:
+    """Doubly-linked list node used internally by LRUCache to maintain usage order.
+
+    Each node stores a key, a value, and pointers to the previous and next nodes in the list.
+    """
     def __init__(self, key, value, next=None, prev=None):
         self.key = key
         self.value = value
@@ -128,8 +128,22 @@ class ListNode:
         
         
 class LRUCache(Cache):
+    """Thread-safe Least Recently Used (LRU) cache implementation.
+
+    Maintains a fixed capacity and evicts the least recently used entries when capacity is exceeded.
+    Uses a doubly-linked list to track usage order, with most recently used items at the end.
+    Thread safety is ensured via a reentrant lock.
+    """
     
     def __init__(self, capacity):
+        """Initialize the LRUCache with a fixed capacity.
+
+        Args:
+            capacity (int): Maximum number of entries the cache can hold.
+
+        Side Effects:
+            Initializes internal linked list with dummy head and tail nodes and sets up locking.
+        """
         super().__init__()
         self.capacity = capacity
         
@@ -141,7 +155,20 @@ class LRUCache(Cache):
         
     
     def get(self, key):
-        
+        """Retrieve the value for a given key and mark it as recently used.
+
+        Args:
+            key: The key to look up in the cache.
+
+        Returns:
+            tuple: (value, True) if key exists; (None, False) otherwise.
+
+        Side Effects:
+            Moves the accessed node to the end of the usage list to mark it as recently used.
+
+        Concurrency:
+            Thread-safe; acquires a lock during access and modification.
+        """
         with self.lock:
             if key not in self.store:
                 return (None, False)
@@ -154,6 +181,19 @@ class LRUCache(Cache):
             return (node.value, True)
         
     def set(self, key, value):
+        """Set the value for a given key, updating usage and evicting if necessary.
+
+        Args:
+            key: The key to store.
+            value: The value associated with the key.
+
+        Side Effects:
+            Updates existing node or adds a new node to the end of the usage list.
+            Evicts the least recently used node if capacity is exceeded.
+
+        Concurrency:
+            Thread-safe; acquires a lock during modification.
+        """
         with self.lock:
             if key in self.store:
                 node = self.store[key]
@@ -170,6 +210,17 @@ class LRUCache(Cache):
                 self._delete(node_to_delete)
         
     def _delete(self, node):
+        """Remove a node from the linked list and from the store.
+
+        Args:
+            node (ListNode): The node to remove.
+
+        Side Effects:
+            Updates pointers of neighboring nodes and removes the node from the cache store.
+
+        Concurrency:
+            Assumes caller holds the lock.
+        """
         node.prev.next = node.next
         node.next.prev = node.prev
         
@@ -181,6 +232,17 @@ class LRUCache(Cache):
         
         
     def _add_to_end(self, node):
+        """Add a node to the end of the linked list, marking it as most recently used.
+
+        Args:
+            node (ListNode): The node to add.
+
+        Side Effects:
+            Updates pointers of the tail and previous last node to include the new node.
+
+        Concurrency:
+            Assumes caller holds the lock.
+        """
         previous = self.tail.prev
         if previous is None:
             raise RuntimeError("List structure corrupted: tail.prev is None")
@@ -189,6 +251,3 @@ class LRUCache(Cache):
         node.next = self.tail
         self.tail.prev = node
         
-        
-    def size(self):
-        return len(self.store)
