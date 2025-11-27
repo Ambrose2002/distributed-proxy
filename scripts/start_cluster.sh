@@ -10,6 +10,8 @@ LB_PORT=9000
 TTL=30
 RB_STRATEGY="round_robin"
 LL_STRATEGY="least_loaded"
+LRU_CACHE="lru"
+TTL_CACHE="ttl"
 
 rm -f .cluster_pids
 
@@ -22,7 +24,8 @@ sleep 1
 # start proxy nodes
 for port in 8001 8002 8003; do 
     echo "Starting proxy on $port"
-    python ../proxy/proxy_node.py --port $port --origin_port $ORIGIN_PORT --ttl $TTL &
+    # Sets up proxy. Uses LRU Cache with a default cache_capacity of 3
+    python ../proxy/proxy_node.py --port $port --origin_port $ORIGIN_PORT --cache_type $LRU_CACHE &
     echo $! >> .cluster_pids
     sleep 1
 done
