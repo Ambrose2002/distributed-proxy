@@ -16,6 +16,7 @@ Behavior:
 import socket
 import json
 import argparse
+import time
 
 def build_request(path):
     """
@@ -78,7 +79,7 @@ def send_request(host, port, request_str):
         first_line = f.readline()
 
         if first_line:
-            return json.loads(first_line)
+            return first_line
         else:
             response = {
                 "status": "CLIENT_CONNECTION_ERROR",
@@ -106,7 +107,11 @@ def run(args):
     """
     if args.metrics:
         request_str = "METRICS\n"
-        print(send_request(args.host, args.port, request_str))
+        start_time = time.time()
+        res = json.loads(send_request(args.host, args.port, request_str))
+        end_time = time.time()
+        res["latency_ms"] = (end_time - start_time) * 1000
+        print(json.dumps(res, indent=4))
         return
 
     if not args.get:
@@ -114,7 +119,11 @@ def run(args):
         return
     url = args.get
     request_str = build_request(url)
-    print(send_request(args.host, args.port, request_str))
+    start_time = time.time()
+    res = json.loads(send_request(args.host, args.port, request_str))
+    end_time = time.time()
+    res["latency_ms"] = (end_time - start_time) * 1000
+    print(json.dumps(res, indent=4))
 
 
 if __name__ == "__main__":
